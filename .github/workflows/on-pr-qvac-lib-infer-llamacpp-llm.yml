@@ -55,8 +55,6 @@ jobs:
     secrets: inherit
     with:
       workdir: packages/qvac-lib-infer-llamacpp-llm
-      artifact_prefix: llm-llamacpp
-      enable_coverage: true
 
   cpp-lint:
     uses: tetherto/qvac-devops/.github/workflows/cpp-lint.yaml@monorepo_update
