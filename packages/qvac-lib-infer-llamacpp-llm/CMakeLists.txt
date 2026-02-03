@@ -26,7 +26,9 @@ configure_file(${VCPKG_INSTALLED_PATH}/share/qvac-lint-cpp/.clang-tidy
 find_path(PICOJSON_INCLUDE_DIRS "picojson/picojson.h")
 find_path(QVAC_LIB_INFERENCE_ADDON_CPP_INCLUDE_DIRS "qvac-lib-inference-addon-cpp/Addon.hpp")
 find_package(llama CONFIG REQUIRED)
-
+if(TARGET llama AND NOT TARGET llama::llama)
+  add_library(llama::llama ALIAS llama)
+endif()
 if(WIN32)
   add_definitions( -DNOMINMAX -DWIN32_MEAN_AND_LEAN -DNOGDI )
 endif()
