@@ -55,6 +55,7 @@ jobs:
     with:
       sha: ${{ github.event.pull_request.base.sha }}
       pr_head_sha: ${{ github.event.pull_request.head.sha }}
+      workdir: packages/qvac-lib-infer-llamacpp-embed
 
   cpp-tests:
     if: contains( github.event.pull_request.labels.*.name, 'verify') || github.event_name == 'workflow_dispatch'
@@ -77,6 +78,7 @@ jobs:
           node-version: 20
 
       - name: Configure npm auth
+        working-directory: packages/qvac-lib-infer-llamacpp-embed
         run: |
           cat > .npmrc <<NPMRC
           registry=https://registry.npmjs.org/
@@ -85,9 +87,11 @@ jobs:
           NPMRC
 
       - name: Install dependencies
+        working-directory: packages/qvac-lib-infer-llamacpp-embed
         run: npm install
 
       - name: Type declaration check
+        working-directory: packages/qvac-lib-infer-llamacpp-embed
         run: npm run test:dts
 
   prebuild:
