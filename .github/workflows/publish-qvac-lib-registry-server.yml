@@ -147,7 +147,7 @@ jobs:
 
       - name: Configure npm for package registries
         shell: bash
-        working-directory: ${{ env.PKG_DIR }}
+        working-directory: ${{ env.PKG_DIR }}/client
         run: |
           echo "@tetherto:registry=https://npm.pkg.github.com" >> ~/.npmrc
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
@@ -185,8 +185,7 @@ jobs:
 
   publish-client:
     needs: [detect-changes, publish-logic, publish-schema]
-    # disabled to allow initial publish
-    # needs: [detect-changes, publish-logic, publish-schema, lint-and-test]
+    needs: [detect-changes, publish-logic, publish-schema, lint-and-test]
     if: |
       needs.detect-changes.outputs.client_changed == 'true' &&
       always() &&
