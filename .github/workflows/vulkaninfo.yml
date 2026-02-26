@@ -140,7 +140,7 @@ jobs:
 
           Write-Host "Running silent install ..."
           $proc = Start-Process -FilePath $sdkInstaller `
-                                -ArgumentList "--accept-licenses", "--default-answer", "--confirm-command", "install" `
+                                -ArgumentList "--root", "C:\VulkanSDK", "--accept-licenses", "--default-answer", "--confirm-command", "install" `
                                 -Wait -PassThru
           Write-Host "Installer exit code: $($proc.ExitCode)"
 
@@ -150,10 +150,10 @@ jobs:
           }
 
           # Locate vulkaninfo.exe explicitly under the SDK install dir
-          $sdkRoot      = "C:\VulkanSDK\$sdkVersion\Bin\vulkaninfo.exe"
-          $fallbackRoot = Get-ChildItem "C:\VulkanSDK" -Filter "vulkaninfo.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          $vulkaninfoSDK      = "C:\VulkanSDK\Bin\vulkaninfoSDK.exe"
+          $fallbackRoot = Get-ChildItem "C:\VulkanSDK" -Filter "vulkaninfoSDK.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
 
-          $vulkaninfoPath = if (Test-Path $sdkRoot) { $sdkRoot } else { $fallbackRoot }
+          $vulkaninfoPath = if (Test-Path $vulkaninfoSDK) { $vulkaninfoSDK } else { $fallbackRoot }
 
           if (-not $vulkaninfoPath) {
             Write-Error "vulkaninfo.exe not found after SDK install"
@@ -181,6 +181,9 @@ jobs:
           Write-Host ""
           Write-Host "=== Driver Version (baseline) ==="
           nvidia-smi --query-gpu=driver_version --format=csv,noheader
+          Write-Host ""
+          Write-Host "=== Running VulkaninfoSDK ==="
+          C:\VulkanSDK\Bin\vulkaninfoSDK.exe --summary
 
       - name: Collect diagnostics into files
         continue-on-error: true
