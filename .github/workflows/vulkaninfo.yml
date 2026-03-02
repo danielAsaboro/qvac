@@ -62,40 +62,7 @@ jobs:
           # $driverUrl   = "https://us.download.nvidia.com/tesla/591.59/591.59-data-center-tesla-desktop-winserver-2022-2025-dch-international.exe"
           $driverUrl    = "https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU19.4/582.16_grid_win10_win11_server2022_server2025_dch_64bit_international.exe"
           $installer   = "$env:TEMP\nvidia_driver.exe"
-
-          # Create an HttpClient instance
-          Add-Type -AssemblyName System.Net.Http
-          $client = New-Object System.Net.Http.HttpClient
-          $response = $client.GetAsync($driverUrl, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).Result
-          $response.EnsureSuccessStatusCode() | Out-Null
-
-          # Get the total size of the content for progress calculation
-          $totalBytes = $response.Content.Headers.ContentLength
-          $bytesRead = 0
-          $buffer = New-Object byte[] 8192 # Use a buffer for chunking
-          $fileStream = [System.IO.File]::Create($installer)
-          $responseStream = $response.Content.ReadAsStreamAsync().Result
-
-          try {
-              # Read the response stream in chunks and write to file
-              while (($bytesReadCount = $responseStream.ReadAsync($buffer, 0, $buffer.Length).Result) -gt 0) {
-                  $fileStream.WriteAsync($buffer, 0, $bytesReadCount) | Out-Null
-                  $bytesRead += $bytesReadCount
-
-                  # Calculate and display progress (only updates every second in the example)
-                  $percent = [int](($bytesRead / $totalBytes) * 100)
-                  Write-Progress -Activity "Downloading File" -Status "$percent% Complete ($bytesRead of $totalBytes bytes)" -PercentComplete $percent
-              }
-          }
-          finally {
-              # Ensure streams and client are closed and disposed
-              $fileStream.Dispose()
-              $responseStream.Dispose()
-              $client.Dispose()
-          }
-
-          Write-Progress -Activity "Downloading File" -Status "Download Complete" -PercentComplete 100
-
+          wget $driverUrl -o $installer
 
           Write-Host "Running silent install ..."
           $proc = Start-Process -FilePath $installer `
