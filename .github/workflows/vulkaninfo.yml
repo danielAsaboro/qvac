@@ -104,3 +104,15 @@ jobs:
           Write-Host ""
           Write-Host "=== Running Vulkaninfo ==="
           vulkaninfo.exe --summary
+
+      - name: Install Vulkan SDK
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe -OutFile vulkan-sdk.exe -PassThru -UseBasicParsing
+          ./vulkan-sdk.exe --root C:\VulkanSDK --accept-licenses --default-answer --confirm-command install
+          echo "VULKAN_SDK=C:\VulkanSDK" >> $Env:GITHUB_ENV
+          vulkaninfoSDK.exe --summary
+        shell: powershell
+        timeout-minutes: 40
