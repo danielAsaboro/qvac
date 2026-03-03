@@ -17,7 +17,7 @@ jobs:
           Write-Host "Architecture: $($os.OSArchitecture)"
 
       - name: Install WinGet
-        uses: kkaminsk/install-winget@v1.2.0
+        uses: Cyberboss/install-winget@v1
 
       - name: Install git for windows with WinGet
         shell: powershell
