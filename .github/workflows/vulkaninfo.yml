@@ -19,7 +19,7 @@ jobs:
       - name: Install git for windows
         shell: powershell
         run: |
-          winget install -e --id Git.Git
+          winget install --id Git.Git -e --disable-interactivity --accept-package-agreements
           git --version
 
       - name: Enable Windows 11 Developer Mode via Registry
