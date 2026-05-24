@@ -30,6 +30,7 @@ import {
   PARAKEET_CTC_0_6B_Q8_0,
   PARAKEET_SORTFORMER_4SPK_V2_1_Q8_0,
   PARAKEET_EOU_120M_V1_Q8_0,
+  SMOLVLA_LIBERO_VISION_Q8,
   SMOLVLM2_500M_MULTIMODAL_Q8_0,
   MMPROJ_SMOLVLM2_500M_MULTIMODAL_Q8_0,
   SALAMANDRATA_2B_INST_Q4,
@@ -58,6 +59,7 @@ import { TranscriptionExecutor } from "./executors/transcription-executor.js";
 import { TranscribeStreamEventsExecutor } from "./executors/transcribe-stream-events-executor.js";
 import { RagExecutor } from "./executors/rag-executor.js";
 import { OcrExecutor } from "./executors/ocr-executor.js";
+import { VlaExecutor } from "./executors/vla-executor.js";
 import { ConfigReloadExecutor } from "./executors/config-reload-executor.js";
 import { DesktopLoggingExecutor } from "./executors/logging-executor.js";
 import { RegistryExecutor } from "../shared/executors/registry-executor.js";
@@ -150,6 +152,12 @@ resources.define("ocr", {
   constant: OCR_LATIN_RECOGNIZER_1,
   type: "ocr",
   config: { langList: ["en"] },
+});
+
+resources.define("vla", {
+  constant: SMOLVLA_LIBERO_VISION_Q8,
+  type: "vla",
+  config: { backend: "cpu" },
 });
 
 resources.define("sharded-embeddings", {
@@ -416,6 +424,7 @@ export const executor = createExecutor({
     new TranslationExecutor(resources),
     new ShardedModelExecutor(resources),
     new OcrExecutor(resources),
+    new VlaExecutor(resources),
     new TtsExecutor(resources),
     new ConfigReloadExecutor(resources),
     new DesktopLoggingExecutor(resources),

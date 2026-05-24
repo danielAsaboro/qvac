@@ -29,12 +29,14 @@ import {
   ttsModelTypeSchema,
   ocrModelTypeSchema,
   diffusionModelTypeSchema,
+  vlaModelTypeSchema,
   ModelType,
   ModelTypeAliases,
   type CanonicalModelType,
   type ModelTypeInput,
 } from "./model-types";
 import { sdcppConfigSchema } from "./sdcpp-config";
+import { vlaConfigSchema } from "./vla";
 
 // Set of all built-in model types (canonical + aliases) for catch-all exclusion
 const builtInModelTypes = new Set([
@@ -113,6 +115,13 @@ export const loadBuiltinModelOptionsBaseSchema = z.union([
       ...loadModelCommonFields,
       modelType: diffusionModelTypeSchema,
       modelConfig: sdcppConfigSchema.strict().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      ...loadModelCommonFields,
+      modelType: vlaModelTypeSchema,
+      modelConfig: vlaConfigSchema.strict().optional(),
     })
     .strict(),
 ]);
@@ -297,6 +306,24 @@ const loadModelOptionsToRequestBaseSchema = z.union([
   z
     .object({
       ...loadModelRequestCommonFields,
+      modelType: vlaModelTypeSchema,
+      modelConfig: vlaConfigSchema.strict().optional(),
+    })
+    .strict()
+    .transform((data) => ({
+      type: "loadModel" as const,
+      modelType: ModelType.ggmlVla,
+      modelSrc: modelInputToSrcSchema.parse(data.modelSrc),
+      modelName: modelInputToNameSchema.parse(data.modelSrc),
+      modelConfig: data.modelConfig ?? {},
+      seed: data.seed ?? false,
+      withProgress: data.withProgress ?? !!data.onProgress,
+      delegate: data.delegate,
+      ...(data.requestId !== undefined && { requestId: data.requestId }),
+    })),
+  z
+    .object({
+      ...loadModelRequestCommonFields,
       modelType: z.string().refine((val) => !builtInModelTypes.has(val), {
         message: "Built-in model types must use their specific schema",
       }),
@@ -393,6 +420,13 @@ export const loadDiffusionModelRequestSchema = commonModelConfigSchema
   })
   .strict();
 
+export const loadVlaModelRequestSchema = commonModelConfigSchema
+  .extend({
+    modelType: z.literal(ModelType.ggmlVla),
+    modelConfig: vlaConfigSchema.optional(),
+  })
+  .strict();
+
 // Custom plugin catch-all: accepts any modelType string EXCEPT built-ins
 export const loadCustomPluginModelRequestSchema =
   commonModelConfigSchema.extend({
@@ -413,6 +447,7 @@ export const loadModelSrcRequestSchema = z
     loadTtsModelRequestSchema,
     loadOcrModelRequestSchema,
     loadDiffusionModelRequestSchema,
+    loadVlaModelRequestSchema,
     loadCustomPluginModelRequestSchema,
   ])
   .transform((data) => ({
@@ -570,7 +605,9 @@ export type InferredConfig<S> = S extends {
               ? z.input<typeof parakeetConfigSchema>
               : S extends { engine: typeof ModelType.sdcppGeneration }
                 ? z.input<typeof sdcppConfigSchema>
-                : Record<string, unknown>;
+                : S extends { engine: typeof ModelType.ggmlVla }
+                  ? z.input<typeof vlaConfigSchema>
+                  : Record<string, unknown>;
 
 /**
  * `loadModel` options for descriptors that preserve a literal `engine`.
