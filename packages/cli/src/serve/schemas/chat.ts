@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Tool } from '@qvac/sdk'
 import {
   chatMessage,
@@ -8,7 +11,8 @@ import {
   extractGenerationParams,
   extractResponseFormat,
   type GenerationParams,
-  type ResponseFormat
+  type ResponseFormat,
+  type MessageContentPart
 } from './common.js'
 
 export const chatCompletionsBody = z.object({
@@ -34,14 +38,9 @@ export const CHAT_UNSUPPORTED_PARAMS = [
   'stop'
 ] as const
 
-interface ContentPart {
-  type: string
-  text?: string
-}
-
 interface OpenAIMessage {
   role: string
-  content: string | null | undefined | ContentPart[]
+  content: string | null | undefined | MessageContentPart[]
   tool_calls?: Array<{
     id: string
     type: string
@@ -50,24 +49,63 @@ interface OpenAIMessage {
   tool_call_id?: string
 }
 
-function contentToString (content: OpenAIMessage['content']): string {
-  if (typeof content === 'string') return content
-  if (Array.isArray(content)) {
-    return content
-      .filter((p): p is ContentPart & { type: 'text'; text: string } => p.type === 'text' && typeof p.text === 'string')
-      .map(p => p.text)
-      .join('')
-  }
-  return ''
+interface ChatHistoryItem {
+  role: string
+  content: string
+  attachments?: Array<{ path: string }>
 }
 
-export function openaiMessagesToHistory (messages: OpenAIMessage[]): Array<{ role: string; content: string }> {
+export function openaiMessagesToHistory (messages: OpenAIMessage[]): ChatHistoryItem[] {
   return messages.map((msg) => {
     if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
       return { role: 'assistant', content: synthesizeToolCallContent(msg.tool_calls) }
     }
-    return { role: msg.role, content: contentToString(msg.content) }
+    if (Array.isArray(msg.content)) {
+      return multimodalContentToHistory(msg.role, msg.content)
+    }
+    return {
+      role: msg.role,
+      content: typeof msg.content === 'string' ? msg.content : (msg.content ?? '').toString()
+    }
   })
+}
+
+// The inference image loader (stb_image, via llama.cpp) decodes PNG and JPEG. Other formats
+// (e.g. webp) would fail to load and abort the completion mid-stream, so we only materialize
+// supported types — keyed by media type → file extension.
+const SUPPORTED_IMAGE_TYPES: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png'
+}
+
+// OpenAI multimodal content is an array of parts. Concatenate the text and decode any
+// `image_url` (base64 data URL) into a temp file referenced via SDK `attachments`, so
+// multimodal models receive the image. Non-data URLs and unsupported image formats are
+// skipped (the turn degrades to text-only rather than crashing the model).
+function multimodalContentToHistory (role: string, parts: MessageContentPart[]): ChatHistoryItem {
+  let content = ''
+  const attachments: Array<{ path: string }> = []
+  for (const part of parts) {
+    if (part.type === 'text') {
+      content += part.text
+    } else if (part.type === 'image_url') {
+      const url = typeof part.image_url === 'string' ? part.image_url : part.image_url.url
+      const path = imageUrlToAttachmentPath(url)
+      if (path !== undefined) attachments.push({ path })
+    }
+  }
+  return attachments.length > 0 ? { role, content, attachments } : { role, content }
+}
+
+function imageUrlToAttachmentPath (url: string): string | undefined {
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,(.*)$/is.exec(url)
+  if (match === null) return undefined
+  const ext = SUPPORTED_IMAGE_TYPES[match[1].toLowerCase()]
+  if (ext === undefined) return undefined
+  const dir = mkdtempSync(join(tmpdir(), 'qvac-image-'))
+  const file = join(dir, `image.${ext}`)
+  writeFileSync(file, Buffer.from(match[2], 'base64'))
+  return file
 }
 
 function synthesizeToolCallContent (toolCalls: NonNullable<OpenAIMessage['tool_calls']>): string {
@@ -86,7 +124,7 @@ function synthesizeToolCallContent (toolCalls: NonNullable<OpenAIMessage['tool_c
 export type ChatCompletionsBody = z.infer<typeof chatCompletionsBody>
 
 export interface SdkChatArgs {
-  history: Array<{ role: string; content: string }>
+  history: ChatHistoryItem[]
   tools: Tool[] | undefined
   generationParams: GenerationParams | undefined
   responseFormat: ResponseFormat | undefined

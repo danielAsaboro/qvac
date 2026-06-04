@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import {
   openaiToolsToSdk,
   extractResponseFormat,
@@ -114,6 +115,39 @@ describe('openaiMessagesToHistory', () => {
     const messages = [{ role: 'tool', content: '{"result": 42}', tool_call_id: 'call_1' }]
     const history = openaiMessagesToHistory(messages)
     assert.deepEqual(history[0], { role: 'tool', content: '{"result": 42}' })
+  })
+
+  it('concatenates text content parts into a string', () => {
+    const messages = [{ role: 'user', content: [{ type: 'text', text: 'hello ' }, { type: 'text', text: 'world' }] }]
+    const history = openaiMessagesToHistory(messages)
+    assert.deepEqual(history[0], { role: 'user', content: 'hello world' })
+  })
+
+  it('decodes an image_url data URL into an attachment path', () => {
+    // 1x1 transparent PNG.
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+    const messages = [{ role: 'user', content: [{ type: 'text', text: 'what is this?' }, { type: 'image_url', image_url: { url: dataUrl } }] }]
+    const history = openaiMessagesToHistory(messages)
+    assert.equal(history[0]!.role, 'user')
+    assert.equal(history[0]!.content, 'what is this?')
+    assert.equal(history[0]!.attachments!.length, 1)
+    assert.ok(history[0]!.attachments![0]!.path.endsWith('.png'))
+    assert.ok(existsSync(history[0]!.attachments![0]!.path))
+  })
+
+  it('accepts a string image_url and skips non-data URLs', () => {
+    const dataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
+    const messages = [{ role: 'user', content: [{ type: 'image_url', image_url: dataUrl }, { type: 'image_url', image_url: 'https://example.com/x.png' }] }]
+    const history = openaiMessagesToHistory(messages)
+    assert.equal(history[0]!.attachments!.length, 1)
+    assert.ok(history[0]!.attachments![0]!.path.endsWith('.jpg'))
+  })
+
+  it('skips unsupported image formats (e.g. webp) and degrades to text-only', () => {
+    const webp = 'data:image/webp;base64,UklGRhIAAABXRUJQVlA4TAYAAAAvAAAAAAfQ//73v/+BiOh/AAA='
+    const messages = [{ role: 'user', content: [{ type: 'text', text: 'see this' }, { type: 'image_url', image_url: { url: webp } }] }]
+    const history = openaiMessagesToHistory(messages)
+    assert.deepEqual(history[0], { role: 'user', content: 'see this' })
   })
 })
 
