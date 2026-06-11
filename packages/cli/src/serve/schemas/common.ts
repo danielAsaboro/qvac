@@ -148,6 +148,13 @@ export class InvalidResponseFormatError extends Error {
   }
 }
 
+export class UnsupportedImageContentError extends Error {
+  constructor (message: string) {
+    super(message)
+    this.name = 'UnsupportedImageContentError'
+  }
+}
+
 export function extractResponseFormat (body: Record<string, unknown>): ResponseFormat | undefined {
   const raw = body['response_format']
   if (raw === undefined || raw === null) return undefined

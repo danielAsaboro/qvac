@@ -1,13 +1,15 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
+import { unlink } from 'node:fs/promises'
 import {
   openaiToolsToSdk,
   extractResponseFormat,
   InvalidResponseFormatError,
+  UnsupportedImageContentError,
   extractGenerationParams
 } from '../src/serve/schemas/common.js'
-import { openaiMessagesToHistory } from '../src/serve/schemas/chat.js'
+import { openaiMessagesToHistory, writeChatImages } from '../src/serve/schemas/chat.js'
 import {
   parseExpiresAfter,
   parseMetadata,
@@ -123,7 +125,7 @@ describe('openaiMessagesToHistory', () => {
     assert.deepEqual(history[0], { role: 'user', content: 'hello world' })
   })
 
-  it('decodes an image_url data URL into an attachment path', () => {
+  it('decodes an image_url data URL into image bytes', () => {
     // 1x1 transparent PNG.
     const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
     const messages = [{ role: 'user', content: [{ type: 'text', text: 'what is this?' }, { type: 'image_url', image_url: { url: dataUrl } }] }]
@@ -131,23 +133,46 @@ describe('openaiMessagesToHistory', () => {
     assert.equal(history[0]!.role, 'user')
     assert.equal(history[0]!.content, 'what is this?')
     assert.equal(history[0]!.attachments!.length, 1)
-    assert.ok(history[0]!.attachments![0]!.path.endsWith('.png'))
-    assert.ok(existsSync(history[0]!.attachments![0]!.path))
+    assert.equal(history[0]!.attachments![0]!.ext, 'png')
+    assert.ok(Buffer.isBuffer(history[0]!.attachments![0]!.bytes))
   })
 
-  it('accepts a string image_url and skips non-data URLs', () => {
+  it('accepts a string (data URL) image_url', () => {
     const dataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
-    const messages = [{ role: 'user', content: [{ type: 'image_url', image_url: dataUrl }, { type: 'image_url', image_url: 'https://example.com/x.png' }] }]
+    const messages = [{ role: 'user', content: [{ type: 'image_url', image_url: dataUrl }] }]
     const history = openaiMessagesToHistory(messages)
     assert.equal(history[0]!.attachments!.length, 1)
-    assert.ok(history[0]!.attachments![0]!.path.endsWith('.jpg'))
+    assert.equal(history[0]!.attachments![0]!.ext, 'jpg')
   })
 
-  it('skips unsupported image formats (e.g. webp) and degrades to text-only', () => {
+  // Reviewer ask: an image the server cannot materialize must fail loudly (→ 400) instead of
+  // silently dropping to a text-only completion the user never asked for.
+  it('throws on a remote (non-data) image_url', () => {
+    const messages = [{ role: 'user', content: [{ type: 'image_url', image_url: 'https://example.com/x.png' }] }]
+    assert.throws(() => openaiMessagesToHistory(messages), UnsupportedImageContentError)
+  })
+
+  it('throws on an unsupported image format (e.g. webp)', () => {
     const webp = 'data:image/webp;base64,UklGRhIAAABXRUJQVlA4TAYAAAAvAAAAAAfQ//73v/+BiOh/AAA='
     const messages = [{ role: 'user', content: [{ type: 'text', text: 'see this' }, { type: 'image_url', image_url: { url: webp } }] }]
-    const history = openaiMessagesToHistory(messages)
-    assert.deepEqual(history[0], { role: 'user', content: 'see this' })
+    assert.throws(() => openaiMessagesToHistory(messages), UnsupportedImageContentError)
+  })
+
+  it('throws on a payload that is not valid base64 image data', () => {
+    const messages = [{ role: 'user', content: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,not*real*base64*data' } }] }]
+    assert.throws(() => openaiMessagesToHistory(messages), UnsupportedImageContentError)
+  })
+
+  it('writeChatImages materializes attachment bytes to flat temp files', async () => {
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+    const messages = [{ role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl } }] }]
+    const { history, tmpPaths } = await writeChatImages(openaiMessagesToHistory(messages))
+    assert.equal(tmpPaths.length, 1)
+    assert.ok(tmpPaths[0]!.endsWith('.png'))
+    assert.ok(existsSync(tmpPaths[0]!))
+    assert.equal(history[0]!.attachments![0]!.path, tmpPaths[0])
+    await unlink(tmpPaths[0]!)
+    assert.ok(!existsSync(tmpPaths[0]!))
   })
 })
 
